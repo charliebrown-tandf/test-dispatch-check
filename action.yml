@@ -7,12 +7,12 @@ branding:
   color: 'blue'
 
 inputs:
-  downtime:
-    description: 'Does this change cause downtime?'
+  no-downtime:
+    description: 'I confirm this change does NOT cause downtime'
     required: true
   
-  pii-changes:
-    description: 'Does this change affect PII data?'
+  no-pii-changes:
+    description: 'I confirm this change does NOT affect PII data'
     required: true
   
   change-request:
@@ -23,6 +23,7 @@ inputs:
   tests-verified:
     description: 'Engineer confirms: Tests passed and changes verified'
     required: true
+  
 
 outputs:
   release-type:
@@ -53,13 +54,13 @@ runs:
       id: check-impact
       shell: bash
       run: |
-        # Determine release type based on inputs
-        if [ "${{ inputs.downtime }}" = "true" ] || [ "${{ inputs.pii-changes }}" = "true" ]; then
+        # Determine release type based on confirmations
+        if [ "${{ inputs.no-downtime }}" = "false" ] || [ "${{ inputs.no-pii-changes }}" = "false" ]; then
           echo "release_type=major" >> $GITHUB_OUTPUT
-          echo "::notice::Major release detected - downtime or PII changes"
+          echo "::notice::Major release detected - downtime or PII impact not ruled out"
         else
           echo "release_type=minor" >> $GITHUB_OUTPUT
-          echo "::notice::Minor release - no downtime or PII impact"
+          echo "::notice::Minor release - engineer confirmed no downtime or PII impact"
         fi
     
     - name: Validate Change Request (Major releases only)
@@ -103,8 +104,8 @@ runs:
           "deployed_by": "${{ github.actor }}",
           "timestamp": "$TIMESTAMP",
           "commit": "${{ github.sha }}",
-          "downtime": ${{ inputs.downtime }},
-          "pii_changes": ${{ inputs.pii-changes }},
+          "no_downtime_confirmed": ${{ inputs.no-downtime }},
+          "no_pii_changes_confirmed": ${{ inputs.no-pii-changes }},
           "tests_verified": ${{ inputs.tests-verified }},
           "change_request": "${{ steps.validate-cr.outputs.cr_number }}",
           "repository": "${{ github.repository }}",
@@ -122,3 +123,22 @@ runs:
         name: governance-record-${{ github.run_id }}
         path: governance-record.json
         retention-days: 180  # 6 months
+    
+    - name: Mock ServiceNow Notification
+      shell: bash
+      run: |
+        RELEASE_TYPE="${{ steps.check-impact.outputs.release_type }}"
+        echo "📧 Sending ServiceNow notification..."
+        
+        SERVICENOW_PAYLOAD=$(cat << EOF
+        {
+          "subject": "Production Deployment - $RELEASE_TYPE Release",
+          "body": "Deployment authorized and proceeding\\n\\nRelease Type: $RELEASE_TYPE\\nDeployed by: ${{ github.actor }}\\nTimestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')\\nRepository: ${{ github.repository }}\\nCommit: ${{ github.sha }}\\nWorkflow: ${{ github.workflow }}\\nRun: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        }
+        EOF
+        )
+        
+        echo "ServiceNow notification payload:"
+        echo "$SERVICENOW_PAYLOAD" | jq .
+        echo "✅ Mock ServiceNow notification sent"
+    

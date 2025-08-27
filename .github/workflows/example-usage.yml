@@ -1,17 +1,19 @@
+# Example: Team usage - governance with built-in form calls team deployment
+
 name: Production Release
 
 on:
   workflow_dispatch:
     inputs:
-      downtime:
-        description: 'Does this change cause downtime?'
+      no_downtime:
+        description: 'I confirm this change does NOT cause downtime'
         type: boolean
-        required: true
+        required: false
         default: false
-      pii_changes:
-        description: 'Does this change affect PII data?'
+      no_pii_changes:
+        description: 'I confirm this change does NOT affect PII data'
         type: boolean
-        required: true
+        required: false
         default: false
       change_request:
         description: 'Change Request # (required if major release)'
@@ -21,47 +23,33 @@ on:
       tests_verified:
         description: 'I confirm: Tests passed, Sonar passed, changes verified'
         type: boolean
-        required: true
+        required: false
         default: false
 
 jobs:
-  release:
+  governance:
+    name: Release Governance Check
     runs-on: ubuntu-latest
+    outputs:
+      approved: ${{ steps.gov.conclusion == 'success' }}
     
     steps:
-    - name: Checkout code
+    - name: Checkout
       uses: actions/checkout@v4
     
-    # GOVERNANCE GATE - ALL TEAMS ADD THIS STEP
-    - name: Release Governance Check
-      uses: ./  # Use your-org/actions/release-governance@v1
+    - name: Governance Check
+      id: gov
+      uses: ./action.yml
       with:
-        downtime: ${{ github.event.inputs.downtime }}
-        pii-changes: ${{ github.event.inputs.pii_changes }}
-        change-request: ${{ github.event.inputs.change_request }}
-        tests-verified: ${{ github.event.inputs.tests_verified }}
-    
-    # TEAM'S EXISTING DEPLOYMENT - UNCHANGED
-    - name: Deploy Application
-      run: |
-        echo "🚀 Deploying application..."
-        # Team's existing deployment commands:
-        # docker build -t myapp:${{ github.sha }} .
-        # docker push myapp:${{ github.sha }}
-        # kubectl set image deployment/myapp myapp=myapp:${{ github.sha }}
-        # kubectl rollout status deployment/myapp
-    
-    - name: Verify Deployment
-      run: |
-        echo "✅ Running health checks..."
-        # Team's existing verification:
-        # curl -f https://myapp.com/health
-        # kubectl get pods -l app=myapp
-    
-    # OPTIONAL: CREATE AUDIT RECORD AFTER SUCCESSFUL DEPLOY
-    - name: Create Deployment Record
-      if: success()
-      run: |
-        echo "Creating audit record with governance data:"
-        echo "${{ env.GOVERNANCE_DATA }}"
-        # Teams can optionally create their own audit records here
+        no-downtime: ${{ inputs.no_downtime }}
+        no-pii-changes: ${{ inputs.no_pii_changes }}
+        change-request: ${{ inputs.change_request }}
+        tests-verified: ${{ inputs.tests_verified }}
+
+  deploy:
+    name: Deploy Application
+    needs: governance
+    if: needs.governance.outputs.approved == 'true'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      triggered_by: "governance"

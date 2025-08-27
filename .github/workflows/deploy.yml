@@ -1,0 +1,48 @@
+name: Deploy Application
+
+on:
+  workflow_call:
+    inputs:
+      triggered_by:
+        description: 'Triggered by governance workflow'
+        type: string
+        required: false
+        default: 'manual'
+  workflow_dispatch:
+    inputs:
+      triggered_by:
+        description: 'Triggered by governance workflow'
+        type: string
+        required: false
+        default: 'manual'
+
+jobs:
+  deploy:
+    name: Deploy Application
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: Run Deployment
+      uses: ./mock-deploy-action.yml
+    
+    - name: Commit version changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add package.json
+        git commit -m "Deploy version ${{ env.DEPLOYED_VERSION }} [skip ci]" || exit 0
+        git push || echo "Failed to push - may need permissions"
+    
+    - name: Deployment Complete
+      run: |
+        echo "🎉 Deployment completed successfully!"
+        echo "New version: ${{ env.DEPLOYED_VERSION }}"
+        echo "Triggered by: ${{ inputs.triggered_by }}"
