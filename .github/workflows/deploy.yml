@@ -25,5 +25,5 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
     
-    - name: Deploy Application  
-      uses: ./mock-deploy-action.yml
+    - name: Deploy Application
+      run: echo "DEPLOYING application"
