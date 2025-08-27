@@ -39,7 +39,7 @@ jobs:
     
     - name: Governance Check
       id: gov
-      uses: ./action.yml
+      uses: ./
       with:
         no-downtime: ${{ inputs.no_downtime }}
         no-pii-changes: ${{ inputs.no_pii_changes }}
