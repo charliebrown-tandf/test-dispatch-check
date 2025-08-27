@@ -30,7 +30,7 @@ jobs:
       with:
         node-version: '18'
     
-    - name: Run Deployment
+    - name: Run Mock Deployment
       uses: ./mock-deploy-action.yml
     
     - name: Commit version changes
