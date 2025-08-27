@@ -1,0 +1,39 @@
+flowchart LR
+    Start([Production Release 👤]) --> RunTests[Run All Tests 🖥️]
+    
+    RunTests -->|Tests Fail| StopFail[❌ Block Release 🖥️]
+    RunTests -->|Tests Pass| CheckDowntime{Has Downtime? 🖥️}
+    
+    CheckDowntime -->|No| CheckPII{PII Changes? 🖥️}
+    CheckDowntime -->|Yes| InputCR[Input Change Request # 👤]
+    
+    CheckPII -->|No = Minor| Deploy[🚀 Deploy to Production 🖥️]
+    CheckPII -->|Yes = Major| InputCR
+    
+    InputCR --> DeployMajor[🚀 Deploy to Production 🖥️]
+    
+    Deploy --> EmailSNOW[📧 Email ServiceNow 🖥️]
+    DeployMajor --> Verify[✅ Verify Deployment 🖥️]
+    EmailSNOW --> Verify
+    Verify -->|Success| Complete[✅ Release Complete 🖥️]
+    Verify -->|Failed| Rollback[🔄 Rollback 👤]
+    
+    %% Style definitions
+    classDef start fill:#9ff, stroke:#0c9, stroke-width:2px;
+    classDef process fill:#fff, stroke:#999, stroke-width:1px;
+    classDef decision fill:#ffd, stroke:#db0, stroke-width:2px;
+    classDef success fill:#cfc, stroke:#0c0, stroke-width:2px;
+    classDef danger fill:#fcc, stroke:#c00, stroke-width:2px;
+    
+    %% Classifications
+    class Start start;
+    class RunTests,Deploy,DeployMajor,EmailSNOW,Verify process;
+    class DetermineType,CheckMinor,CheckMajor decision;
+    class Complete success;
+    class StopFail,StopMinor,StopMajor,Rollback danger;
+    
+    %% Legend
+    subgraph Legend
+        GitHubProc[🖥️ GitHub Actions]
+        ManualProc[👤 Manual Process]
+    end

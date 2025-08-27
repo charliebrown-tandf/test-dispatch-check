@@ -1,0 +1,12 @@
+{
+  "name": "test-app",
+  "version": "1.0.0",
+  "description": "Test application for governance workflow",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Tests passed!\"",
+    "start": "node index.js"
+  },
+  "author": "Test Team",
+  "license": "MIT"
+}

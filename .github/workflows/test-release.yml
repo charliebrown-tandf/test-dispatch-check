@@ -1,0 +1,79 @@
+name: Test Production Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      downtime:
+        description: 'Does this change cause downtime?'
+        type: boolean
+        required: true
+        default: false
+      pii_changes:
+        description: 'Does this change affect PII data?'
+        type: boolean
+        required: true
+        default: false
+      change_request:
+        description: 'Change Request # (required if major release)'
+        type: string
+        required: false
+        default: ''
+      tests_verified:
+        description: 'I confirm: Tests passed, Sonar passed, changes verified'
+        type: boolean
+        required: true
+        default: false
+
+jobs:
+  governance:
+    name: Release Governance Check
+    runs-on: ubuntu-latest
+    outputs:
+      release-type: ${{ steps.governance.outputs.release-type }}
+      approved: ${{ steps.governance.outputs.governance-approved }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Release Governance Check
+      id: governance
+      uses: ./  # Use local governance action
+      with:
+        downtime: ${{ github.event.inputs.downtime }}
+        pii-changes: ${{ github.event.inputs.pii_changes }}
+        change-request: ${{ github.event.inputs.change_request }}
+        tests-verified: ${{ github.event.inputs.tests_verified }}
+
+  deploy:
+    name: Mock Deployment
+    runs-on: ubuntu-latest
+    needs: governance
+    if: needs.governance.outputs.approved == 'true'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: Run Mock Deploy
+      uses: ./mock-deploy-action.yml
+    
+    - name: Commit version bump
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add package.json
+        git commit -m "Bump version to ${{ env.DEPLOYED_VERSION }} [skip ci]" || exit 0
+        git push || echo "Failed to push - may need permissions"
+    
+    - name: Display Results
+      run: |
+        echo "🎉 Release completed successfully!"
+        echo "Release Type: ${{ needs.governance.outputs.release-type }}"
+        echo "New Version: ${{ env.DEPLOYED_VERSION }}"
+        echo "Governance record available in artifacts"

@@ -1,0 +1,124 @@
+name: 'Release Governance Check'
+description: 'Pre-deployment governance check with impact assessment and audit trail creation'
+author: 'Your Organization'
+
+branding:
+  icon: 'zap'
+  color: 'blue'
+
+inputs:
+  downtime:
+    description: 'Does this change cause downtime?'
+    required: true
+  
+  pii-changes:
+    description: 'Does this change affect PII data?'
+    required: true
+  
+  change-request:
+    description: 'Change Request number (required for major releases)'
+    required: false
+    default: ''
+  
+  tests-verified:
+    description: 'Engineer confirms: Tests passed and changes verified'
+    required: true
+
+outputs:
+  release-type:
+    description: 'Type of release (minor or major)'
+    value: ${{ steps.check-impact.outputs.release_type }}
+  
+  change-request:
+    description: 'Change request number (for major releases)'
+    value: ${{ steps.validate-cr.outputs.cr_number }}
+  
+  governance-approved:
+    description: 'Whether governance check passed'
+    value: ${{ steps.validate-cr.outcome == 'success' || steps.check-impact.outputs.release_type == 'minor' }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Verify Engineer Confirmation
+      shell: bash
+      run: |
+        if [ "${{ inputs.tests-verified }}" != "true" ]; then
+          echo "::error::Engineer must confirm tests passed and changes verified"
+          exit 1
+        fi
+        echo "::notice::Engineer confirmed: Tests passed and changes verified"
+    
+    - name: Determine Release Type
+      id: check-impact
+      shell: bash
+      run: |
+        # Determine release type based on inputs
+        if [ "${{ inputs.downtime }}" = "true" ] || [ "${{ inputs.pii-changes }}" = "true" ]; then
+          echo "release_type=major" >> $GITHUB_OUTPUT
+          echo "::notice::Major release detected - downtime or PII changes"
+        else
+          echo "release_type=minor" >> $GITHUB_OUTPUT
+          echo "::notice::Minor release - no downtime or PII impact"
+        fi
+    
+    - name: Validate Change Request (Major releases only)
+      id: validate-cr
+      if: steps.check-impact.outputs.release_type == 'major'
+      shell: bash
+      run: |
+        CR_NUMBER="${{ inputs.change-request }}"
+        
+        if [ -z "$CR_NUMBER" ]; then
+          echo "::error::Major release requires Change Request number"
+          exit 1
+        fi
+        
+        echo "::notice::Change Request: $CR_NUMBER"
+        echo "cr_number=$CR_NUMBER" >> $GITHUB_OUTPUT
+    
+    - name: Governance Check Complete
+      shell: bash
+      run: |
+        RELEASE_TYPE="${{ steps.check-impact.outputs.release_type }}"
+        
+        if [ "$RELEASE_TYPE" = "major" ]; then
+          echo "✅ Major release approved with Change Request: ${{ steps.validate-cr.outputs.cr_number }}"
+        else
+          echo "✅ Minor release approved - deployment may proceed"
+        fi
+        
+        echo "::notice::Governance check passed - deployment authorized"
+    
+    - name: Create Governance Audit Record
+      shell: bash
+      run: |
+        RELEASE_TYPE="${{ steps.check-impact.outputs.release_type }}"
+        TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        
+        # Create JSON audit record
+        cat > governance-record.json << EOF
+        {
+          "release_type": "$RELEASE_TYPE",
+          "deployed_by": "${{ github.actor }}",
+          "timestamp": "$TIMESTAMP",
+          "commit": "${{ github.sha }}",
+          "downtime": ${{ inputs.downtime }},
+          "pii_changes": ${{ inputs.pii-changes }},
+          "tests_verified": ${{ inputs.tests-verified }},
+          "change_request": "${{ steps.validate-cr.outputs.cr_number }}",
+          "repository": "${{ github.repository }}",
+          "workflow": "${{ github.workflow }}",
+          "run_id": "${{ github.run_id }}",
+          "run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        }
+        EOF
+        
+        echo "📋 Governance record created: governance-record.json"
+    
+    - name: Upload Governance Audit Record
+      uses: actions/upload-artifact@v4
+      with:
+        name: governance-record-${{ github.run_id }}
+        path: governance-record.json
+        retention-days: 180  # 6 months
